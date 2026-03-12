@@ -15,10 +15,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import Animated, {
-  FadeInDown,
-  FadeInUp,
-} from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Step = "code" | "name";
@@ -226,7 +223,9 @@ export default function JoinLobbyScreen() {
                 autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={handleVerifyCode}
-                keyboardType={Platform.OS === "ios" ? "default" : "visible-password"}
+                keyboardType={
+                  Platform.OS === "ios" ? "default" : "visible-password"
+                }
               />
               <Text style={[styles.hint, { color: colors.subtext }]}>
                 {normalizedCode.length}/6 characters
@@ -275,7 +274,7 @@ export default function JoinLobbyScreen() {
                   setName(t);
                   setError(null);
                 }}
-                placeholder="e.g. Alex"
+                placeholder="e.g. John Doe"
                 placeholderTextColor={colors.subtext}
                 style={[
                   styles.input,

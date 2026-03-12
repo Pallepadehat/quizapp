@@ -2,15 +2,21 @@ import AnimatedButton from "@/components/ui/animated-button";
 import FloatingLogo from "@/components/ui/floating-logo";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, useColorScheme, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function RootScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+
+  const colors = {
+    bg: isDark ? "#000000" : "#ffffff",
+  };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: "#ffffff" }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={styles.contentContainer}>
         <Animated.View style={styles.topSection}>
           <FloatingLogo />
@@ -20,14 +26,14 @@ export default function RootScreen() {
           <AnimatedButton
             title="Create Lobby"
             onPress={() => router.push("/(screens)/create-lobby")}
-            isDarkMode={false}
+            isDarkMode={isDark}
             delay={100}
             rotationDirection={-1}
           />
           <AnimatedButton
             title="Join Lobby"
             onPress={() => router.push("/(screens)/join-lobby")}
-            isDarkMode={false}
+            isDarkMode={isDark}
             delay={200}
             rotationDirection={1}
           />

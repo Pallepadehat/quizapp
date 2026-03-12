@@ -16,10 +16,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import Animated, {
-  FadeInDown,
-  FadeInUp,
-} from "react-native-reanimated";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function CreateLobbyScreen() {
@@ -109,7 +106,12 @@ export default function CreateLobbyScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        <Pressable style={styles.content} onPress={Keyboard.dismiss}>
+        <Pressable
+          style={styles.content}
+          onPress={() => {
+            if (Platform.OS !== "web") Keyboard.dismiss();
+          }}
+        >
           {/* Title block */}
           <Animated.View
             entering={FadeInDown.delay(60).duration(400).springify()}
@@ -145,7 +147,7 @@ export default function CreateLobbyScreen() {
                 setName(t);
                 setError(null);
               }}
-              placeholder="e.g. Alex"
+              placeholder="e.g. John Doe"
               placeholderTextColor={colors.subtext}
               style={[
                 styles.input,
