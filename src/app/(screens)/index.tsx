@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   gameTitleImage: {
-    height: Platform.OS === "web" ? 200 : 160,
+    height: Platform.OS === "web" ? 300 : 250,
     resizeMode: "contain",
   },
 
