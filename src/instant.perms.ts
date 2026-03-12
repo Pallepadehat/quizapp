@@ -3,22 +3,27 @@
 import type { InstantRules } from "@instantdb/react-native";
 
 const rules = {
-  /**
-   * Welcome to Instant's permission system!
-   * Right now your rules are empty. To start filling them in, check out the docs:
-   * https://www.instantdb.com/docs/permissions
-   *
-   * Here's an example to give you a feel:
-   * posts: {
-   *   allow: {
-   *     view: "true",
-   *     create: "isOwner",
-   *     update: "isOwner",
-   *     delete: "isOwner",
-   *   },
-   *   bind: {"isOwner": "auth.id != null && auth.id == data.ownerId"},
-   * },
-   */
+  lobbies: {
+    allow: {
+      // Anyone can view lobbies (needed to validate invite codes)
+      view: "true",
+      // Anyone (even guests) can create a lobby
+      create: "true",
+      // Only allow updates (e.g. status changes) — open for now
+      update: "true",
+      // Only allow the creator to delete — we store hostMemberId on the lobby
+      // for now we keep it open; lock down later
+      delete: "true",
+    },
+  },
+  lobbyMembers: {
+    allow: {
+      view: "true",
+      create: "true",
+      update: "true",
+      delete: "true",
+    },
+  },
 } satisfies InstantRules;
 
 export default rules;
