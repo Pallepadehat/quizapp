@@ -24,13 +24,35 @@ const _schema = i.schema({
       code: i.string().unique().indexed(),
       // Display name of the host
       hostName: i.string(),
+      // Host member id for permissions/badges in lobby UI
+      hostMemberId: i.string(),
       // Status: "waiting" | "playing" | "finished"
       status: i.string(),
+      // Editable host settings
+      category: i.string(),
+      questionCount: i.number(),
+      timerSeconds: i.number(),
+      maxPlayers: i.number(),
+      // Serialized question payload for this lobby session
+      questionsJson: i.string().optional(),
+      // Runtime state
+      currentQuestionIndex: i.number().optional(),
+      currentQuestionStartedAt: i.date().optional(),
+      startedAt: i.date().optional(),
+      finishedAt: i.date().optional(),
       createdAt: i.date(),
     }),
     lobbyMembers: i.entity({
       // Display name chosen at join time
       name: i.string(),
+      // Remote avatar image URL
+      avatarUrl: i.string().optional(),
+      // Runtime game stats
+      score: i.number().optional(),
+      correctAnswers: i.number().optional(),
+      currentAnswerIndex: i.number().optional(),
+      answeredQuestionIndex: i.number().optional(),
+      answeredAt: i.date().optional(),
       joinedAt: i.date(),
     }),
   },

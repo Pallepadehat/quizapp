@@ -1,11 +1,14 @@
 import { DB } from "@/utils/db";
+import { generateQuizQuestions } from "@/utils/generate-quiz-questions";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -26,8 +29,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 type Member = {
   id: string;
   name: string;
+  avatarUrl?: string;
+  score?: number;
+  correctAnswers?: number;
+  currentAnswerIndex?: number;
+  answeredQuestionIndex?: number;
+  answeredAt?: number | string;
   joinedAt: number | string;
 };
+
+const CATEGORIES = ["General", "Science", "History", "Sports", "Movies"] as const;
 
 // ─────────────────────────────────────────
 // Component
@@ -48,6 +59,7 @@ export default function LobbyScreen() {
   const isDark = colorScheme === "dark";
 
   const [codeCopied, setCodeCopied] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   const colors = {
     bg: isDark ? "#000000" : "#ffffff",
@@ -80,6 +92,17 @@ export default function LobbyScreen() {
   const members: Member[] = (lobby?.members ?? []).sort((a: Member, b: Member) =>
     Number(a.joinedAt) < Number(b.joinedAt) ? -1 : 1,
   );
+  const lobbyStatus = lobby?.status as string | undefined;
+
+  useEffect(() => {
+    if (lobbyStatus === "playing") {
+      setIsStarting(false);
+      router.replace({
+        pathname: "/(screens)/game",
+        params: { lobbyId, memberId, isHost: isHost ? "true" : "false" },
+      });
+    }
+  }, [isHost, lobbyId, lobbyStatus, memberId, router]);
 
   // ── Leave lobby ───────────────────────────────────────────
   async function handleLeave() {
@@ -97,15 +120,17 @@ export default function LobbyScreen() {
             try {
               if (isHost) {
                 // Delete all members then the lobby
-                const txns = members.map((m) =>
+                const memberDeletes = members.map((m) =>
                   DB.tx.lobbyMembers[m.id].delete(),
                 );
-                txns.push(DB.tx.lobbies[lobbyId].delete());
-                await DB.transact(txns);
+                await DB.transact([
+                  ...memberDeletes,
+                  DB.tx.lobbies[lobbyId].delete(),
+                ]);
               } else {
                 await DB.transact(DB.tx.lobbyMembers[memberId].delete());
               }
-              router.replace("/(screens)/");
+              router.replace("/(screens)");
             } catch {
               Alert.alert("Error", "Could not leave lobby. Please try again.");
             }
@@ -125,6 +150,59 @@ export default function LobbyScreen() {
       setTimeout(() => setCodeCopied(false), 2000);
     } else {
       Share.share({ message: `Join my quiz lobby! Code: ${code}` });
+    }
+  }
+
+  async function updateLobbySettings(
+    patch: Partial<{
+      category: string;
+      questionCount: number;
+      timerSeconds: number;
+      maxPlayers: number;
+    }>,
+  ) {
+    try {
+      await DB.transact(DB.tx.lobbies[lobbyId].update(patch));
+    } catch {
+      Alert.alert("Error", "Could not update lobby settings.");
+    }
+  }
+
+  async function handleStartGame() {
+    if (!lobby || isStarting) return;
+    if ((lobby.status as string | undefined) === "playing") return;
+    setIsStarting(true);
+
+    try {
+      const category = (lobby.category as string | undefined) ?? "General";
+      const questionCount = Number(lobby.questionCount ?? 10);
+      const questions = generateQuizQuestions(category, questionCount);
+      const startedAt = Date.now();
+
+      const txns = [
+        DB.tx.lobbies[lobbyId].update({
+          status: "playing",
+          startedAt,
+          questionsJson: JSON.stringify(questions),
+          currentQuestionIndex: 0,
+          currentQuestionStartedAt: startedAt,
+        }),
+        ...members.map((member) =>
+          DB.tx.lobbyMembers[member.id].update({
+            score: 0,
+            correctAnswers: 0,
+            currentAnswerIndex: -1,
+            answeredQuestionIndex: -1,
+            answeredAt: 0,
+          }),
+        ),
+      ];
+
+      await DB.transact(txns);
+    } catch (error) {
+      console.error("Failed to start game", error);
+      Alert.alert("Error", "Could not start game. Please try again.");
+      setIsStarting(false);
     }
   }
 
@@ -157,7 +235,7 @@ export default function LobbyScreen() {
             This lobby may have been closed.
           </Text>
           <TouchableOpacity
-            onPress={() => router.replace("/(screens)/")}
+            onPress={() => router.replace("/(screens)")}
             style={[styles.goHomeBtn, { backgroundColor: colors.accent }]}
           >
             <Text style={[styles.goHomeBtnText, { color: colors.accentText }]}>
@@ -170,7 +248,11 @@ export default function LobbyScreen() {
   }
 
   const code = lobby.code as string;
-  const hostName = lobby.hostName as string;
+  const hostMemberId = (lobby.hostMemberId as string | undefined) ?? members[0]?.id;
+  const category = (lobby.category as string | undefined) ?? "General";
+  const questionCount = Number(lobby.questionCount ?? 10);
+  const timerSeconds = Number(lobby.timerSeconds ?? 10);
+  const maxPlayers = Number(lobby.maxPlayers ?? 8);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.bg }]}>
@@ -202,7 +284,11 @@ export default function LobbyScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      <View style={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Invite code card */}
         <Animated.View
           entering={FadeInDown.delay(60).duration(400).springify()}
@@ -232,6 +318,92 @@ export default function LobbyScreen() {
               {codeCopied ? "✓ Copied!" : Platform.OS === "web" ? "Copy Code" : "Share Code"}
             </Text>
           </Pressable>
+        </Animated.View>
+
+        {/* Lobby settings */}
+        <Animated.View
+          entering={FadeInDown.delay(90).duration(400).springify()}
+          style={styles.membersSection}
+        >
+          <Text style={[styles.membersTitle, { color: colors.text }]}>
+            Settings
+          </Text>
+          <View
+            style={[
+              styles.membersList,
+              { backgroundColor: colors.card, borderColor: colors.divider },
+            ]}
+          >
+            <View
+              style={[
+                styles.settingRow,
+                { borderBottomColor: colors.divider, borderBottomWidth: StyleSheet.hairlineWidth },
+              ]}
+            >
+              <Text style={[styles.settingLabel, { color: colors.subtext }]}>
+                Category
+              </Text>
+              <Pressable
+                disabled={!isHost}
+                onPress={() => {
+                  if (!isHost) return;
+                  const currentIndex = CATEGORIES.indexOf(
+                    category as (typeof CATEGORIES)[number],
+                  );
+                  const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % CATEGORIES.length;
+                  updateLobbySettings({ category: CATEGORIES[nextIndex] });
+                }}
+                style={[
+                  styles.settingValueButton,
+                  {
+                    backgroundColor: isHost ? colors.memberBg : "transparent",
+                    borderColor: colors.divider,
+                  },
+                ]}
+              >
+                <Text style={[styles.settingValueText, { color: colors.text }]}>
+                  {category}
+                </Text>
+              </Pressable>
+            </View>
+
+            <SettingStepper
+              label="Questions"
+              value={questionCount}
+              min={5}
+              max={30}
+              step={5}
+              isHost={isHost}
+              colors={colors}
+              onChange={(next) => updateLobbySettings({ questionCount: next })}
+            />
+            <SettingStepper
+              label="Timer (sec)"
+              value={timerSeconds}
+              min={5}
+              max={30}
+              step={5}
+              isHost={isHost}
+              colors={colors}
+              onChange={(next) => updateLobbySettings({ timerSeconds: next })}
+            />
+            <SettingStepper
+              label="Max Players"
+              value={maxPlayers}
+              min={Math.max(2, members.length)}
+              max={12}
+              step={1}
+              isHost={isHost}
+              colors={colors}
+              onChange={(next) => updateLobbySettings({ maxPlayers: next })}
+              hideDivider
+            />
+          </View>
+          {!isHost && (
+            <Text style={[styles.startHint, { color: colors.subtext }]}>
+              Only the host can change settings.
+            </Text>
+          )}
         </Animated.View>
 
         {/* Members list */}
@@ -276,16 +448,23 @@ export default function LobbyScreen() {
                   ]}
                 >
                   {/* Avatar */}
-                  <View
-                    style={[
-                      styles.avatar,
-                      { backgroundColor: getAvatarColor(member.name, isDark) },
-                    ]}
-                  >
-                    <Text style={styles.avatarText}>
-                      {member.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  {member.avatarUrl ? (
+                    <Image
+                      source={{ uri: member.avatarUrl }}
+                      style={styles.avatarImage}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatar,
+                        { backgroundColor: getAvatarColor(member.name, isDark) },
+                      ]}
+                    >
+                      <Text style={styles.avatarText}>
+                        {member.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
 
                   <View style={styles.memberInfo}>
                     <Text style={[styles.memberName, { color: colors.text }]}>
@@ -299,7 +478,7 @@ export default function LobbyScreen() {
                   </View>
 
                   {/* Host badge */}
-                  {index === 0 && (
+                  {member.id === hostMemberId && (
                     <View
                       style={[
                         styles.hostBadge,
@@ -330,39 +509,37 @@ export default function LobbyScreen() {
           >
             <TouchableOpacity
               activeOpacity={0.75}
-              disabled={members.length < 1}
+              disabled={members.length < 1 || isStarting}
               style={[
                 styles.startBtn,
                 {
                   backgroundColor:
-                    members.length >= 1 ? colors.accent : colors.card,
+                    members.length >= 1 && !isStarting ? colors.accent : colors.card,
                 },
               ]}
-              onPress={() => {
-                /* TODO: start the game */
-                Alert.alert("Coming soon!", "Game start will be added soon.");
-              }}
+              onPress={handleStartGame}
             >
-              <Text
-                style={[
-                  styles.startBtnText,
-                  {
-                    color:
-                      members.length >= 1
-                        ? colors.accentText
-                        : colors.subtext,
-                  },
-                ]}
-              >
-                Start Game
-              </Text>
+              {isStarting ? (
+                <ActivityIndicator color={colors.accentText} />
+              ) : (
+                <Text
+                  style={[
+                    styles.startBtnText,
+                    {
+                      color: members.length >= 1 ? colors.accentText : colors.subtext,
+                    },
+                  ]}
+                >
+                  Start Game
+                </Text>
+              )}
             </TouchableOpacity>
             <Text style={[styles.startHint, { color: colors.subtext }]}>
-              You can start whenever everyone has joined.
+              {`Round: ${questionCount} questions · ${timerSeconds}s each · max ${maxPlayers} players`}
             </Text>
           </Animated.View>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -393,6 +570,83 @@ function getAvatarColor(name: string, isDark: boolean): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash += name.charCodeAt(i);
   return colors[hash % colors.length];
+}
+
+type SettingStepperProps = {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  isHost: boolean;
+  colors: {
+    text: string;
+    subtext: string;
+    divider: string;
+    memberBg: string;
+  };
+  onChange: (next: number) => void;
+  hideDivider?: boolean;
+};
+
+function SettingStepper({
+  label,
+  value,
+  min,
+  max,
+  step,
+  isHost,
+  colors,
+  onChange,
+  hideDivider = false,
+}: SettingStepperProps) {
+  const decDisabled = !isHost || value <= min;
+  const incDisabled = !isHost || value >= max;
+
+  return (
+    <View
+      style={[
+        styles.settingRow,
+        !hideDivider && {
+          borderBottomColor: colors.divider,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+        },
+      ]}
+    >
+      <Text style={[styles.settingLabel, { color: colors.subtext }]}>{label}</Text>
+      <View style={styles.stepperRow}>
+        <Pressable
+          disabled={decDisabled}
+          onPress={() => onChange(Math.max(min, value - step))}
+          style={[
+            styles.stepperBtn,
+            {
+              backgroundColor: colors.memberBg,
+              borderColor: colors.divider,
+              opacity: decDisabled ? 0.45 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.stepperBtnText, { color: colors.text }]}>-</Text>
+        </Pressable>
+        <Text style={[styles.stepperValue, { color: colors.text }]}>{value}</Text>
+        <Pressable
+          disabled={incDisabled}
+          onPress={() => onChange(Math.min(max, value + step))}
+          style={[
+            styles.stepperBtn,
+            {
+              backgroundColor: colors.memberBg,
+              borderColor: colors.divider,
+              opacity: incDisabled ? 0.45 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.stepperBtnText, { color: colors.text }]}>+</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 // ─────────────────────────────────────────
@@ -468,8 +722,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  scrollContent: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: Platform.OS === "web" ? 48 : 20,
@@ -555,6 +812,59 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#555555",
+  },
+  avatarImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  settingLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  settingValueButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  settingValueText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  stepperBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperBtnText: {
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  stepperValue: {
+    minWidth: 26,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "600",
   },
   memberInfo: {
     flex: 1,

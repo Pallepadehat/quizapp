@@ -39,6 +39,7 @@ export default function FloatingLogo() {
         source={require("../../../assets/gameAssets/GameLogo.png")}
         alt="Logo"
         style={styles.gameTitleImage}
+        resizeMode="contain"
       />
     </Animated.View>
   );
@@ -51,6 +52,5 @@ const styles = StyleSheet.create({
   },
   gameTitleImage: {
     height: Platform.OS === "web" ? 300 : 250,
-    resizeMode: "contain",
   },
 });

@@ -7,6 +7,7 @@ export default function ScreenLayout() {
       <Stack.Screen name="create-lobby" options={{ headerShown: false }} />
       <Stack.Screen name="join-lobby" options={{ headerShown: false }} />
       <Stack.Screen name="lobby" options={{ headerShown: false }} />
+      <Stack.Screen name="game" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -2,6 +2,7 @@ import { DB } from "@/utils/db";
 import { generateInviteCode } from "@/utils/invite-code";
 import { id } from "@instantdb/react-native";
 import { useRouter } from "expo-router";
+import pfp from "random-pfp";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -63,11 +64,22 @@ export default function CreateLobbyScreen() {
         DB.tx.lobbies[lobbyId].update({
           code,
           hostName: trimmedName,
+          hostMemberId: memberId,
           status: "waiting",
+          category: "General",
+          questionCount: 10,
+          timerSeconds: 10,
+          maxPlayers: 8,
+          currentQuestionIndex: 0,
           createdAt: Date.now(),
         }),
         DB.tx.lobbyMembers[memberId].update({
           name: trimmedName,
+          avatarUrl: pfp(),
+          score: 0,
+          correctAnswers: 0,
+          currentAnswerIndex: -1,
+          answeredQuestionIndex: -1,
           joinedAt: Date.now(),
         }),
         DB.tx.lobbyMembers[memberId].link({ lobby: lobbyId }),

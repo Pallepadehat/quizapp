@@ -1,6 +1,7 @@
 import { DB } from "@/utils/db";
 import { id } from "@instantdb/react-native";
 import { useRouter } from "expo-router";
+import pfp from "random-pfp";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -68,6 +69,7 @@ export default function JoinLobbyScreen() {
       const result = await DB.queryOnce({
         lobbies: {
           $: { where: { code: normalizedCode } },
+          members: {},
         },
       });
 
@@ -107,12 +109,27 @@ export default function JoinLobbyScreen() {
       const result = await DB.queryOnce({
         lobbies: {
           $: { where: { code: normalizedCode } },
+          members: {},
         },
       });
 
-      const lobby = (result.data.lobbies ?? [])[0];
+      const lobby = (result.data.lobbies ?? [])[0] as
+        | {
+            id: string;
+            maxPlayers?: number;
+            members?: Array<unknown>;
+          }
+        | undefined;
       if (!lobby) {
         setError("Lobby no longer exists.");
+        setIsLoading(false);
+        return;
+      }
+
+      const memberCount = (lobby.members ?? []).length;
+      const maxPlayers = Number(lobby.maxPlayers ?? 8);
+      if (memberCount >= maxPlayers) {
+        setError("This lobby is full.");
         setIsLoading(false);
         return;
       }
@@ -121,6 +138,11 @@ export default function JoinLobbyScreen() {
       await DB.transact([
         DB.tx.lobbyMembers[memberId].update({
           name: trimmedName,
+          avatarUrl: pfp(),
+          score: 0,
+          correctAnswers: 0,
+          currentAnswerIndex: -1,
+          answeredQuestionIndex: -1,
           joinedAt: Date.now(),
         }),
         DB.tx.lobbyMembers[memberId].link({ lobby: lobby.id }),
@@ -168,7 +190,12 @@ export default function JoinLobbyScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        <Pressable style={styles.content} onPress={Keyboard.dismiss}>
+        <Pressable
+          style={styles.content}
+          onPress={() => {
+            if (Platform.OS !== "web") Keyboard.dismiss();
+          }}
+        >
           {/* Title */}
           <Animated.View
             key={step + "-title"}
